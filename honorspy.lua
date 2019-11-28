@@ -41,6 +41,7 @@ function HonorSpy:OnInitialize()
 	HS_wait(5, function() HonorSpy:CheckNeedReset() end)
 	HonorSpyGUI:PrepareGUI()
 	PrintWelcomeMsg();
+	print("welcome rohit")
 
 	if (not HonorSpy.db.factionrealm.syncOverGuild) then
 		HS_wait(8, HS_joinSyncChannel)
@@ -101,10 +102,8 @@ function HonorSpy:INSPECT_HONOR_UPDATE()
 	ClearInspectPlayer();
 	NotifyInspect("target"); -- change real target back to player's target, broken by prev NotifyInspect call
 	ClearInspectPlayer();
-	
 	player.last_checked = GetServerTime();
 	player.RP = 0;
-
 	if (thisweekHK >= 15) then
 		if (player.rank >= 3) then
 			player.RP = math.ceil((player.rank-2) * 5000 + player.rankProgress * 5000)
@@ -234,7 +233,7 @@ LibStub("AceConfig-3.0"):RegisterOptionsTable("HonorSpy", options, {"honorspy", 
 function HonorSpy:BuildStandingsTable(sort_by)
 	local t = { }
 	for playerName, player in pairs(HonorSpy.db.factionrealm.currentStandings) do
-		table.insert(t, {playerName, player.class, player.thisWeekHonor or 0, player.lastWeekHonor or 0, player.standing or 0, player.RP or 0, player.rank or 0, player.last_checked or 0})
+		table.insert(t, {playerName, player.class, tonumber(player.thisWeekHonor) or 0, player.lastWeekHonor or 0, player.standing or 0, player.RP or 0, player.rank or 0, player.last_checked or 0})
 	end
 	
 	local sort_column = 3; -- ThisWeekHonor
@@ -347,9 +346,9 @@ function table.copy(t)
   return setmetatable(u, getmetatable(t))
 end
 
-function store_player(playerName, player)
+function store_player(playerName, player, sender)
 	if (player == nil or playerName:find("[%d%p%s%c%z]")) then return end
-	
+
 	if (not player.last_checked or player.last_checked < HonorSpy.db.factionrealm.last_reset
 		or player.last_checked > GetServerTime()
 		or player.thisWeekHonor == 0
@@ -358,9 +357,13 @@ function store_player(playerName, player)
 	end
 	
 	local player = table.copy(player);
-	local localPlayer = HonorSpy.db.factionrealm.currentStandings[playerName];
-	if (localPlayer == nil or localPlayer.last_checked < player.last_checked) then
-		HonorSpy.db.factionrealm.currentStandings[playerName] = player;
+	player.sender_name = sender;
+	if (player.last_checked > GetServerTime() - 150000) then
+        local localPlayer = HonorSpy.db.factionrealm.currentStandings[playerName];
+        if (localPlayer == nil or localPlayer.last_checked < player.last_checked) then
+            print("asked to store ", playerName, " by ", sender);
+            HonorSpy.db.factionrealm.currentStandings[playerName] = player;
+        end
 	end
 end
 
@@ -374,11 +377,11 @@ function HonorSpy:OnCommReceive(prefix, message, distribution, sender)
 	end
 	if (playerName == "filtered_players") then
 		for playerName, player in pairs(player) do
-			store_player(playerName, player);
+			store_player(playerName, player, sender);
 		end
 		return
 	end
-	store_player(playerName, player);
+	store_player(playerName, player, sender);
 end
 
 function HS_joinSyncChannel()
@@ -414,13 +417,15 @@ end
 -- Broadcast on death
 local last_send_time = 0;
 function HonorSpy:PLAYER_DEAD()
-	local filtered_players, count = {}, 0;
+	local filtered_players, count, totalCount = {}, 0, 0;
 	if (GetServerTime() - last_send_time < 5*60) then return end;
 	last_send_time = GetServerTime();
 
 	for playerName, player in pairs(self.db.factionrealm.currentStandings) do
+	    totalCount = totalCount + 1;
 		filtered_players[playerName] = player;
 		count = count + 1;
+		print(count)
 		if (count == 10) then
 			broadcast(self:Serialize("filtered_players", filtered_players))
 			filtered_players, count = {}, 0;
