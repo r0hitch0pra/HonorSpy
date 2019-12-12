@@ -3,7 +3,7 @@ HonorSpy = LibStub("AceAddon-3.0"):NewAddon("HonorSpy", "AceConsole-3.0", "AceHo
 local L = LibStub("AceLocale-3.0"):GetLocale("HonorSpy", true)
 
 local addonName = GetAddOnMetadata("HonorSpy", "Title");
-local commPrefix = addonName .. "2";
+local commPrefix = addonName .. "4";
 
 local paused = false; -- pause all inspections when user opens inspect frame
 local playerName = UnitName("player");
@@ -14,7 +14,8 @@ function HonorSpy:OnInitialize()
 		factionrealm = {
 			currentStandings = {},
 			last_reset = 0,
-			minimapButton = {hide = false}
+			minimapButton = {hide = false},
+			actualCommPrefix = ""
 		},
 		char = {
 			today_kills = {},
@@ -46,7 +47,7 @@ local inspectedPlayerName = nil; -- name of currently inspected player
 
 local function StartInspecting(unitID)
 	local name, realm = UnitName(unitID);
-	if (paused or realm) then
+	if (paused or (realm and realm ~= "")) then
 		return
 	end
 	if (name ~= inspectedPlayerName) then -- changed target, clear currently inspected player
@@ -109,7 +110,7 @@ function HonorSpy:INSPECT_HONOR_UPDATE()
 			return
 		end
 		lastPlayer = {name = inspectedPlayerName, honor = thisWeekHonor}
-		self.db.factionrealm.currentStandings[inspectedPlayerName] = player;
+		store_player(inspectedPlayerName, player)
 		broadcast(self:Serialize(inspectedPlayerName, player))
 	else
 		self.db.factionrealm.currentStandings[inspectedPlayerName] = nil
@@ -384,7 +385,7 @@ function store_player(playerName, player)
 end
 
 function HonorSpy:OnCommReceive(prefix, message, distribution, sender)
-	if (distribution == "BATTLEGROUND" and UnitRealmRelationship(sender) ~= 1) then
+	if (distribution ~= "GUILD" and UnitRealmRelationship(sender) ~= 1) then
 		return -- discard any message from players from different servers (on x-realm BGs)
 	end
 	local ok, playerName, player = self:Deserialize(message);
@@ -401,11 +402,7 @@ function HonorSpy:OnCommReceive(prefix, message, distribution, sender)
 end
 
 function broadcast(msg, skip_yell)
-	if (UnitInBattleground("player") ~= nil) then
-		HonorSpy:SendCommMessage(commPrefix, msg, "BATTLEGROUND");
-	else
-		HonorSpy:SendCommMessage(commPrefix, msg, "RAID");
-	end
+	HonorSpy:SendCommMessage(commPrefix, msg, "RAID");
 	if (GetGuildInfo("player") ~= nil) then
 		HonorSpy:SendCommMessage(commPrefix, msg, "GUILD");
 	end
@@ -544,6 +541,11 @@ function DBHealthCheck()
 			HonorSpy.db.factionrealm.currentStandings[playerName] = nil
 			HonorSpy:Print("removed bad table row", playerName)
 		end
+	end
+
+	if (HonorSpy.db.factionrealm.actualCommPrefix ~= commPrefix) then
+		HonorSpy:Purge()
+		HonorSpy.db.factionrealm.actualCommPrefix = commPrefix
 	end
 end
 
