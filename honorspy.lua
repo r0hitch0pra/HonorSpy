@@ -90,6 +90,7 @@ function HonorSpy:INSPECT_HONOR_UPDATE()
 		return;
 	end
 	local player = self.db.factionrealm.currentStandings[inspectedPlayerName] or inspectedPlayers[inspectedPlayerName];
+	if (player == nil) then return end
 	if (player.class == nil) then player.class = "nil" end
 
 	local _, _, _, _, thisweekHK, thisWeekHonor, _, lastWeekHonor, standing = GetInspectHonorData();
@@ -449,13 +450,15 @@ function HonorSpy:PLAYER_DEAD()
 end
 
 function FAKE_PLAYERS_FILTER(_s, e, msg, ...)
-	if (not nameToTest) then return end
 	-- not found, fake
 	if (msg == ERR_FRIEND_NOT_FOUND) then
+		if (not nameToTest) then
+			return true
+		end
 		HonorSpy.db.factionrealm.currentStandings[nameToTest] = nil
 		HonorSpy.db.factionrealm.fakePlayers[nameToTest] = true
 		HonorSpy.db.factionrealm.goodPlayers[nameToTest] = nil
-		HonorSpy:Print("removed non-existing player", nameToTest)
+		-- HonorSpy:Print("removed non-existing player", nameToTest)
 		nameToTest = nil
 		return true
 	end
@@ -513,7 +516,7 @@ function HonorSpy:Purge()
 	HonorSpy:Print(L["All data was purged"]);
 end
 
-function HonorSpy:ResetWeek()
+function getResetTime()
 	local currentUnixTime = GetServerTime()
 	local regionId = GetCurrentRegion()
 	local resetDay = 3 -- wed
@@ -545,7 +548,11 @@ function HonorSpy:ResetWeek()
 		must_reset_on = week_start - 7*24*60*60 + reset_seconds
 	end
 
-	HonorSpy.db.factionrealm.last_reset = must_reset_on;
+	return must_reset_on
+end
+
+function HonorSpy:ResetWeek()
+	HonorSpy.db.factionrealm.last_reset = getResetTime();
 	HonorSpy:Purge()
 	HonorSpy:Print(L["Weekly data was reset"]);
 end
@@ -556,7 +563,8 @@ function HonorSpy:CheckNeedReset(skipUpdate)
 	end
 
 	-- reset weekly standings
-	if (HonorSpy.db.factionrealm.currentStandings[playerName] == nil and HonorSpy.db.char.original_honor > 0) then
+	local must_reset_on = getResetTime()
+	if (HonorSpy.db.factionrealm.last_reset ~= must_reset_on) then
 		HonorSpy:ResetWeek()
 		HonorSpy.db.char.original_honor = 0
 		HonorSpy.db.char.estimated_honor = 0
